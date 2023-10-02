@@ -1,100 +1,35 @@
 package main
 
 import (
-  "net/http"
-  "fmt"
-  "os"
-  "log"
-  "database/sql" 
-  // "router/home"
-  
-  "github.com/joho/godotenv"
-  "github.com/gin-gonic/gin"
-  _ "github.com/go-sql-driver/mysql"
+	"cubeWeb/env"
+	"cubeWeb/middlewares"
+	"cubeWeb/model"
+	"cubeWeb/router"
+
+	"github.com/gin-gonic/gin"
 )
-
-type Post struct {
-  content       string
-  authorId      string
-  timestamp     string
-  likeCount     int
-  commentCount  int
-}
-
-func init() {
-  err := godotenv.Load(".env")
-    
-  if err != nil {
-      log.Fatal("Error loading .env file")
-  }
-  
-  // os.Getenv("DBNAME")
-}
-
-// const (
-//   DB_USER = ""
-//   DB_PASS = ""
-//   DB_HOST = ""
-// )
 
 func setupRouter() *gin.Engine {
 	r := gin.Default()
 
-  home := r.Group("/")
-  {
-    home.GET("/", func(c *gin.Context) {
-      var content string
-      var authorId string
-      var timestamp string
-      var likeCount int
-      var commentCount int
-      var posts []Post
-      pageId := c.Query("pageId")
+	r.ForwardedByClientIP = true
+	r.SetTrustedProxies([]string{env.ClientIP})
 
-      rows, err := db.Query("SELECT * FROM post WHERE id <= ?", pageId)
-      if err != nil {
-          log.Fatal(err)
-      }
-      defer rows.Close()
- 
-      for rows.Next() {
-          err := rows.Scan(&content, &authorId, &timestamp, &likeCount, &commentCount)
-          if err != nil {
-              log.Fatal(err)
-          }
-          posts = append(posts, Post{content: content, authorId: authorId, timestamp: timestamp, likeCount: likeCount, commentCount: commentCount}) 
-      }
+	r.Use(gin.Recovery())
+	r.Use(middlewares.Logger())
+	r.Use(middlewares.Cors())
+	r.Use(middlewares.Session())
 
-      //posts
-      c.JSON(http.StatusOK, gin.H{"posts": posts})
-    })
-  }
-
-  signin := r.Group("/signin")
-  {
-    signin.POST("/", func(c *gin.Context) {
-      c.JSON(http.StatusOK, gin.H{"user": user, "value": value})
-    })
-  }
-
-  signup := r.Group("/signup")
-  {
-    signup.POST("/", func(c *gin.Context) {
-      c.JSON(http.StatusOK, gin.H{"user": user, "value": value})
-    })
-  }
+	api := r.Group("/api")
+	router.SetPostRouter(api)
+	router.SetUserRouter(api)
 
 	return r
 }
 
 func main() {
-  db, err := sql.Open("mysql", DB_URL)
-  if err != nil {
-      log.Fatal(err)
-  }
-  defer db.Close()
+	model.ConnectDB()
+	r := setupRouter()
 
-  r := setupRouter()
-
-  r.Run() // Listen and Server in 0.0.0.0:8080
+	r.Run(":8080")
 }
