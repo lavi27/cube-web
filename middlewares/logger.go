@@ -21,7 +21,7 @@ func Logger() gin.HandlerFunc {
 		statusCode := ctx.Writer.Status()
 		clientIP := ctx.ClientIP()
 
-		logger := utils.Logger.WithFields(logrus.Fields{
+		logger := utils.HTTPLogger.WithFields(logrus.Fields{
 			"METHOD":    reqMethod,
 			"URI":       reqUri,
 			"STATUS":    statusCode,
@@ -29,7 +29,7 @@ func Logger() gin.HandlerFunc {
 			"CLIENT_IP": clientIP,
 		})
 
-		if statusCode == 200 {
+		if statusCode == 200 || statusCode == 400 {
 			logger.Info("HTTP_REQ")
 		} else if statusCode == 500 {
 			logger.Error("HTTP_REQ")

@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -22,5 +21,4 @@ func ResError(c *gin.Context, status int, errCode int, msg string) {
 
 func InternalError(c *gin.Context, err error) {
 	ResError(c, http.StatusInternalServerError, 1, "Unknown server error occured")
-	log.Fatal(err)
 }

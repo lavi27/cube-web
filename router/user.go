@@ -38,19 +38,21 @@ func getUser(c *gin.Context) {
 		return
 	}
 
-	dbQuery := model.User{UserId: -1}
+	var dbQuery model.User
 	if err = model.DB.Model(&model.User{}).Select(
 		"users.user_id", "users.user_nm", "users.create_dt", "users.follower_cnt", "users.following_cnt", "users.user_nick_nm",
 		"count(posts) as post_cnt",
 	).Joins(
 		"left join posts on users.user_id = posts.user_id",
-	).Group("users.user_id").Find(&dbQuery, userId).Error; err != nil {
+	).Group("users.user_id").Where(
+		"users.user_id = ?", userId,
+	).Find(&dbQuery).Error; err != nil {
 		utils.InternalError(c, err)
 		return
 	}
 
-	if dbQuery.UserId == -1 {
-		utils.ResError(c, http.StatusBadRequest, 2, "User not found")
+	if dbQuery.UserId == 0 {
+		utils.ResError(c, http.StatusNotFound, 2, "User not found")
 		return
 	}
 
@@ -85,7 +87,7 @@ func postSignin(c *gin.Context) {
 		return
 	}
 
-	dbQuery := model.User{UserId: -1}
+	var dbQuery model.User
 	if err := model.DB.Where(
 		model.User{UserNm: reqBody.userName},
 	).Find(&dbQuery).Error; err != nil {
@@ -93,12 +95,14 @@ func postSignin(c *gin.Context) {
 		return
 	}
 
-	if dbQuery.UserId == -1 {
+	if dbQuery.UserId == 0 {
 		utils.ResError(c, http.StatusBadRequest, 3, "Failed to signin")
+		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(dbQuery.UserPw), []byte(reqBody.userPassword)); err != nil {
 		utils.ResError(c, http.StatusBadRequest, 3, "Failed to signin")
+		return
 	}
 
 	uuid := uuid.New().String()
@@ -140,6 +144,7 @@ func postSignup(c *gin.Context) {
 	}
 	if err := model.DB.Create(&user).Error; err != nil {
 		utils.InternalError(c, err)
+		return
 	}
 
 	uuid := uuid.New().String()

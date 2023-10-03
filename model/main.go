@@ -14,9 +14,9 @@ type Post struct {
 	UserId     int       `gorm:"not null" json:"userId,omitempty"`
 	Content    string    `gorm:"not null" json:"content,omitempty"`
 	CreateDt   time.Time `gorm:"not null;datetime:timestamp;autoCreateTime" json:"createDate,omitempty"`
-	LikeCnt    int       `gorm:"not null;default:0" json:"likeCount,omitempty"`
-	UserNm     string    `gorm:"-" json:"userName,omitempty"`
-	UserNickNm string    `gorm:"-" json:"userNickname,omitempty"`
+	LikeCnt    int       `gorm:"not null;default:0" json:"likeCount"`
+	UserNm     string    `json:"userName,omitempty"`
+	UserNickNm string    `json:"userNickname,omitempty"`
 }
 
 type User struct {
@@ -27,7 +27,7 @@ type User struct {
 	CreateDt     time.Time `gorm:"not null;datetime:timestamp;autoCreateTime" json:"createDate,omitempty"`
 	FollowerCnt  int       `gorm:"not null;default:0" json:"followerCount"`
 	FollowingCnt int       `gorm:"not null;default:0" json:"followingCount"`
-	PostCnt      int       `gorm:"-" json:"postCount"`
+	PostCnt      int       `json:"postCount"`
 }
 
 var DB *gorm.DB
@@ -37,7 +37,7 @@ func ConnectDB() {
 
 	config := gorm.Config{
 		TranslateError: true,
-		Logger:         &utils.GormLogger{},
+		Logger:         utils.SQLLogger,
 	}
 
 	db, err := gorm.Open(postgres.Open(dsn), &config)

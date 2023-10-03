@@ -18,6 +18,16 @@ func SetPostRouter(rg *gin.RouterGroup) {
 	ping.GET("/search", getSearch)
 }
 
+type postResData struct {
+	PostId     int    `json:"postId,omitempty"`
+	UserId     int    `json:"userId,omitempty"`
+	Content    string `json:"content,omitempty"`
+	CreateDt   int64  `json:"createDate,omitempty"`
+	LikeCnt    int    `json:"likeCount"`
+	UserNm     string `json:"userName,omitempty"`
+	UserNickNm string `json:"userNickname,omitempty"`
+}
+
 func getPost(c *gin.Context) {
 	postIdQur := c.Query("postId")
 
@@ -28,40 +38,51 @@ func getPost(c *gin.Context) {
 		return
 	}
 
-	post := model.Post{PostId: -1}
+	var dbQuery model.Post
 	if err = model.DB.Model(&model.Post{}).Select(
 		"posts.*",
 		"users.user_nm", "users.user_nick_nm",
 	).Joins(
 		"left join users on posts.user_id = users.user_id",
-	).Group("posts.post_id").Find(&post, postId).Error; err != nil {
+	).Where(
+		"posts.post_id = ?", postId,
+	).Find(&dbQuery).Error; err != nil {
 		utils.InternalError(c, err)
-	}
-
-	if post.PostId == -1 {
-		utils.ResError(c, http.StatusBadRequest, 2, "Post not found")
 		return
 	}
 
-	utils.ResOK(c, post)
+	if dbQuery.PostId == 0 {
+		utils.ResError(c, http.StatusNotFound, 2, "Post not found")
+		return
+	}
+
+	utils.ResOK(c, postResData{
+		dbQuery.PostId,
+		dbQuery.UserId,
+		dbQuery.Content,
+		dbQuery.CreateDt.Unix(),
+		dbQuery.LikeCnt,
+		dbQuery.UserNm,
+		dbQuery.UserNickNm,
+	})
 }
 
 type postReqBody struct {
-	sessionId string
-	content   string
+	content string
 }
 
 func postPost(c *gin.Context) {
 	session := utils.GetSession(c)
 	var reqBody postReqBody
 
-	if err := c.BindJSON(&reqBody); err != nil {
-		utils.ResError(c, http.StatusBadRequest, 1, "Invaild request body")
-	}
-
 	sessionId, err := c.Cookie("sessionId")
 	if err != nil {
-		utils.ResError(c, http.StatusBadRequest, 2, "You must be logged in")
+		utils.ResError(c, http.StatusUnauthorized, 1, "You must be logged in")
+		return
+	}
+
+	if err := c.BindJSON(&reqBody); err != nil {
+		utils.ResError(c, http.StatusBadRequest, 2, "Invaild request body")
 		return
 	}
 
@@ -69,14 +90,26 @@ func postPost(c *gin.Context) {
 	userId := realSession.Elem().FieldByName(sessionId).Int()
 
 	post := model.Post{
+
 		UserId:  int(userId),
 		Content: reqBody.content,
 	}
 	if err := model.DB.Create(&post).Error; err != nil {
 		utils.InternalError(c, err)
+		return
 	}
 
 	utils.ResOK(c, nil)
+}
+
+type searchResData struct {
+	PostId     int    `gorm:"not null;primaryKey;AUTO_INCREMENT" json:"postId,omitempty"`
+	UserId     int    `gorm:"not null" json:"userId,omitempty"`
+	Content    string `gorm:"not null" json:"content,omitempty"`
+	CreateDt   int64  `gorm:"not null;datetime:timestamp;autoCreateTime" json:"createDate,omitempty"`
+	LikeCnt    int    `gorm:"not null;default:0" json:"likeCount"`
+	UserNm     string `json:"userName,omitempty"`
+	UserNickNm string `json:"userNickname,omitempty"`
 }
 
 func getSearch(c *gin.Context) {
@@ -117,15 +150,36 @@ func getSearch(c *gin.Context) {
 	//NOTE - DB Select
 	var posts []model.Post
 
-	dbQuery := model.DB
+	dbQuery := model.DB.Model(&model.Post{}).Select(
+		"posts.*",
+		"users.user_nm", "users.user_nick_nm",
+	).Joins(
+		"left join users on posts.user_id = users.user_id",
+	).Order("posts.create_dt").Limit(length).Where(
+		"posts.create_dt < ?", dateFrom,
+	)
+
 	if userId != "-1" {
-		dbQuery.Where("user_id = ?", userId)
+		dbQuery.Where("posts.user_id = ?", userId)
 	}
-	err = dbQuery.Where("create_dt < ?", dateFrom).Order("create_dt").Limit(length).Find(&posts).Error
 
-	if err != nil {
+	if err = dbQuery.Find(&posts).Error; err != nil {
 		utils.InternalError(c, err)
+		return
 	}
 
-	utils.ResOK(c, posts)
+	var res []searchResData
+	for _, value := range posts {
+		res = append(res, searchResData{
+			value.PostId,
+			value.UserId,
+			value.Content,
+			value.CreateDt.Unix(),
+			value.LikeCnt,
+			value.UserNm,
+			value.UserNickNm,
+		})
+	}
+
+	utils.ResOK(c, res)
 }
