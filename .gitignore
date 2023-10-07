@@ -1,3 +1,5 @@
 log
 .env
 tmp
+
+static

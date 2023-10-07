@@ -13,10 +13,10 @@ import (
 )
 
 func SetUserRouter(rg *gin.RouterGroup) {
-	ping := rg.Group("/user")
-	ping.GET("/", getUser)
-	ping.POST("/signin", postSignin)
-	ping.POST("/signup", postSignup)
+	group := rg.Group("/user")
+	group.GET("/", getUser)
+	group.POST("/signin/", postSignin)
+	group.POST("/signup/", postSignup)
 }
 
 type userResData struct {

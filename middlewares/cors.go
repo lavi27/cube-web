@@ -1,10 +1,13 @@
 package middlewares
 
-import "github.com/gin-gonic/gin"
+import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+)
 
 func Cors() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// method := c.Request.Method
 		origin := c.GetHeader("Origin")
 
 		c.Header("Access-Control-Allow-Origin", origin)
@@ -13,10 +16,10 @@ func Cors() gin.HandlerFunc {
 		c.Header("Access-Control-Allow-Methods", "POST, GET, OPTIONS,DELETE,PUT")
 		c.Header("Access-Control-Expose-Headers", "Content-Length, Access-Control-Allow-Origin, Access-Control-Allow-Headers, Content-Type,cache-control")
 
-		// if method == "OPTIONS" {
-		// 	//c.AbortWithStatus(http.StatusNoContent)
-		// 	c.AbortWithStatus(http.StatusOK)
-		// }
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
 
 		c.Next()
 	}

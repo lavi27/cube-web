@@ -12,10 +12,10 @@ import (
 )
 
 func SetPostRouter(rg *gin.RouterGroup) {
-	ping := rg.Group("/post")
-	ping.GET("/", getPost)
-	ping.POST("/", postPost)
-	ping.GET("/search", getSearch)
+	group := rg.Group("/post")
+	group.GET("/", getPost)
+	group.POST("/", postPost)
+	group.GET("/search/", getSearch)
 }
 
 type postResData struct {

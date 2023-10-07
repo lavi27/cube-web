@@ -14,6 +14,7 @@ func setupRouter() *gin.Engine {
 
 	r.ForwardedByClientIP = true
 	r.SetTrustedProxies([]string{env.ClientIP})
+	r.Static("/static", "./static")
 
 	r.Use(gin.Recovery())
 	r.Use(middlewares.Logger())
