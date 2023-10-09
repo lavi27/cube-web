@@ -69,8 +69,8 @@ func getUser(c *gin.Context) {
 }
 
 type signinReqBody struct {
-	userName     string
-	userPassword string
+	UserName string `json:"userName"`
+	UserPW   string `json:"userPassword"`
 }
 
 func postSignin(c *gin.Context) {
@@ -89,7 +89,7 @@ func postSignin(c *gin.Context) {
 
 	var dbQuery model.User
 	if err := model.DB.Where(
-		model.User{UserNm: reqBody.userName},
+		model.User{UserNm: reqBody.UserName},
 	).Find(&dbQuery).Error; err != nil {
 		utils.InternalError(c, err)
 		return
@@ -100,7 +100,7 @@ func postSignin(c *gin.Context) {
 		return
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(dbQuery.UserPw), []byte(reqBody.userPassword)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(dbQuery.UserPw), []byte(reqBody.UserPW)); err != nil {
 		utils.ResError(c, http.StatusBadRequest, 3, "Failed to signin")
 		return
 	}
@@ -114,8 +114,8 @@ func postSignin(c *gin.Context) {
 }
 
 type signupReqBody struct {
-	userName     string
-	userPassword string
+	UserName string `json:"userName"`
+	UserPW   string `json:"userPassword"`
 }
 
 func postSignup(c *gin.Context) {
@@ -132,14 +132,29 @@ func postSignup(c *gin.Context) {
 		return
 	}
 
-	pwHash, err := bcrypt.GenerateFromPassword([]byte(reqBody.userPassword), bcrypt.MinCost)
+	// utils.HTTPLogger.Info(reqBody)
+
+	var dbQuery model.User
+	if err := model.DB.Where(
+		model.User{UserNm: reqBody.UserName},
+	).Find(&dbQuery).Error; err != nil {
+		utils.InternalError(c, err)
+		return
+	}
+
+	if dbQuery.UserId != 0 {
+		utils.ResError(c, http.StatusBadRequest, 3, "Same userName already exists")
+		return
+	}
+
+	pwHash, err := bcrypt.GenerateFromPassword([]byte(reqBody.UserPW), bcrypt.MinCost)
 	if err != nil {
-		utils.ResError(c, http.StatusInternalServerError, 3, "Unknown server error occured")
+		utils.InternalError(c, err)
 		return
 	}
 
 	user := model.User{
-		UserNm: reqBody.userName,
+		UserNm: reqBody.UserName,
 		UserPw: string(pwHash),
 	}
 	if err := model.DB.Create(&user).Error; err != nil {

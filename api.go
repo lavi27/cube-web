@@ -5,11 +5,18 @@ import (
 	"cubeWeb/middlewares"
 	"cubeWeb/model"
 	"cubeWeb/router"
+	"cubeWeb/utils"
 
 	"github.com/gin-gonic/gin"
 )
 
 func setupRouter() *gin.Engine {
+	if utils.IsDebug {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	r := gin.Default()
 
 	r.ForwardedByClientIP = true
@@ -24,6 +31,7 @@ func setupRouter() *gin.Engine {
 	api := r.Group("/api")
 	router.SetPostRouter(api)
 	router.SetUserRouter(api)
+	router.SetAccountRouter(api)
 
 	return r
 }

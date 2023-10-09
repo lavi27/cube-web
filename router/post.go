@@ -4,7 +4,6 @@ import (
 	"cubeWeb/model"
 	"cubeWeb/utils"
 	"net/http"
-	"reflect"
 	"strconv"
 	"time"
 
@@ -68,7 +67,7 @@ func getPost(c *gin.Context) {
 }
 
 type postReqBody struct {
-	content string
+	Content string `json:"content"`
 }
 
 func postPost(c *gin.Context) {
@@ -86,13 +85,11 @@ func postPost(c *gin.Context) {
 		return
 	}
 
-	realSession := reflect.ValueOf(session).Elem().FieldByName("session")
-	userId := realSession.Elem().FieldByName(sessionId).Int()
+	userId := utils.GetUserIdBySessionId(session, sessionId)
 
 	post := model.Post{
-
 		UserId:  int(userId),
-		Content: reqBody.content,
+		Content: reqBody.Content,
 	}
 	if err := model.DB.Create(&post).Error; err != nil {
 		utils.InternalError(c, err)
