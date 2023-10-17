@@ -1,5 +1,8 @@
 package utils
 
+const IsDebug = false
+const SessionTimeoutSec = 60 * 60 * 3 //3h
+
 var HttpStatusName = map[int]string{
 	200: "OK",
 	201: "Created",

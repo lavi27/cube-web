@@ -2,14 +2,12 @@ package utils
 
 import (
 	"cubeWeb/env"
+	"errors"
 	"reflect"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
-
-const IsDebug = false
-const SessionTimeoutSec = 60 * 60 * 3 //3h
 
 var IsProduction = env.Enviroment == "production" || env.Enviroment != "devlopment"
 var IsDevlopment = env.Enviroment == "devlopment"
@@ -20,18 +18,31 @@ func GetSession(c *gin.Context) sessions.Session {
 	return session
 }
 
-func GetUserIdBySessionId(session sessions.Session, sessionId string) int64 {
+func IsLoggedIn(c *gin.Context) bool {
+	_, err := c.Cookie("sessionId")
+
+	if err != nil {
+		return true
+	} else {
+		return false
+	}
+}
+
+func GetUserId(c *gin.Context) (int, error) {
+	session := GetSession(c)
+	sessionId, _ := c.Cookie("sessionId")
+
 	realSession := reflect.ValueOf(session).Elem().FieldByName("session")
 
 	if !realSession.IsValid() {
-		panic("")
+		return 0, errors.New("session not found")
 	}
 
 	realSession = realSession.Elem().FieldByName(sessionId)
 
 	if !realSession.IsValid() {
-		panic("")
+		return 0, errors.New("sessionId not found")
 	}
 
-	return realSession.Int()
+	return int(realSession.Int()), nil
 }

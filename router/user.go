@@ -1,22 +1,30 @@
 package router
 
 import (
-	"cubeWeb/env"
+	"cubeWeb/middlewares"
 	"cubeWeb/model"
 	"cubeWeb/utils"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
 )
 
 func SetUserRouter(rg *gin.RouterGroup) {
 	group := rg.Group("/user")
 	group.GET("/", getUser)
-	group.POST("/signin/", postSignin)
-	group.POST("/signup/", postSignup)
+	group.POST("/follow/",
+		middlewares.AuthRequired(),
+		middlewares.CheckReqBody[followReqBody](),
+		middlewares.CheckSessionId(),
+		postFollow,
+	)
+	group.POST("/unfollow/",
+		middlewares.AuthRequired(),
+		middlewares.CheckReqBody[followReqBody](),
+		middlewares.CheckSessionId(),
+		postUnfollow,
+	)
 }
 
 type userResData struct {
@@ -40,7 +48,8 @@ func getUser(c *gin.Context) {
 
 	var dbQuery model.User
 	if err = model.DB.Model(&model.User{}).Select(
-		"users.user_id", "users.user_nm", "users.create_dt", "users.follower_cnt", "users.following_cnt", "users.user_nick_nm",
+		"users.user_id", "users.user_nm", "users.create_dt",
+		"users.follower_cnt", "users.following_cnt", "users.user_nick_nm",
 		"count(posts) as post_cnt",
 	).Joins(
 		"left join posts on users.user_id = posts.user_id",
@@ -68,104 +77,80 @@ func getUser(c *gin.Context) {
 		})
 }
 
-type signinReqBody struct {
-	UserName string `json:"userName"`
-	UserPW   string `json:"userPassword"`
+type followReqBody struct {
+	UserId int `json:"userId"`
 }
 
-func postSignin(c *gin.Context) {
-	session := utils.GetSession(c)
-	var reqBody signinReqBody
+func postFollow(c *gin.Context) {
+	var reqBody followReqBody
+	c.BindJSON(&reqBody)
 
-	if _, err := c.Cookie("sessionId"); err == nil {
-		utils.ResError(c, http.StatusBadRequest, 1, "You already logged in")
-		return
-	}
+	userId, _ := utils.GetUserId(c)
 
-	if err := c.BindJSON(&reqBody); err != nil {
-		utils.ResError(c, http.StatusBadRequest, 2, "Invaild request body")
-		return
-	}
+	var isExist bool
 
-	var dbQuery model.User
-	if err := model.DB.Where(
-		model.User{UserNm: reqBody.UserName},
-	).Find(&dbQuery).Error; err != nil {
-		utils.InternalError(c, err)
-		return
-	}
-
-	if dbQuery.UserId == 0 {
-		utils.ResError(c, http.StatusBadRequest, 3, "Failed to signin")
-		return
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(dbQuery.UserPw), []byte(reqBody.UserPW)); err != nil {
-		utils.ResError(c, http.StatusBadRequest, 3, "Failed to signin")
-		return
-	}
-
-	uuid := uuid.New().String()
-	session.Set(uuid, dbQuery.UserId)
-	session.Save()
-	c.SetCookie("sessionId", uuid, utils.SessionTimeoutSec, "/", env.ClientIP, false, true)
-
-	utils.ResOK(c, nil)
-}
-
-type signupReqBody struct {
-	UserName string `json:"userName"`
-	UserPW   string `json:"userPassword"`
-}
-
-func postSignup(c *gin.Context) {
-	session := utils.GetSession(c)
-	var reqBody signupReqBody
-
-	if _, err := c.Cookie("sessionId"); err == nil {
-		utils.ResError(c, http.StatusBadRequest, 1, "You already logged in")
-		return
-	}
-
-	if err := c.BindJSON(&reqBody); err != nil {
-		utils.ResError(c, http.StatusBadRequest, 2, "Invaild request body")
-		return
-	}
-
-	// utils.HTTPLogger.Info(reqBody)
-
-	var dbQuery model.User
-	if err := model.DB.Where(
-		model.User{UserNm: reqBody.UserName},
-	).Find(&dbQuery).Error; err != nil {
-		utils.InternalError(c, err)
-		return
-	}
-
-	if dbQuery.UserId != 0 {
-		utils.ResError(c, http.StatusBadRequest, 3, "Same userName already exists")
-		return
-	}
-
-	pwHash, err := bcrypt.GenerateFromPassword([]byte(reqBody.UserPW), bcrypt.MinCost)
+	err := model.DB.Model(
+		&model.UserFollow{},
+	).Select("count(*) > 0").Where(
+		"user_id = ? AND target_user_id = ?",
+		userId,
+		reqBody.UserId,
+	).Find(&isExist).Error
 	if err != nil {
 		utils.InternalError(c, err)
 		return
 	}
 
-	user := model.User{
-		UserNm: reqBody.UserName,
-		UserPw: string(pwHash),
+	if isExist {
+		utils.ResError(c, http.StatusBadRequest, 4, "You already followed")
 	}
-	if err := model.DB.Create(&user).Error; err != nil {
+
+	if err := model.DB.Create(
+		model.UserFollow{
+			UserId:       userId,
+			TargetUserId: reqBody.UserId,
+		},
+	).Error; err != nil {
 		utils.InternalError(c, err)
 		return
 	}
 
-	uuid := uuid.New().String()
-	session.Set(uuid, user.UserId)
-	session.Save()
-	c.SetCookie("sessionId", uuid, utils.SessionTimeoutSec, "/", env.ClientIP, false, true)
+	utils.ResOK(c, nil)
+}
+
+func postUnfollow(c *gin.Context) {
+	var reqBody followReqBody
+	c.BindJSON(&reqBody)
+
+	userId, _ := utils.GetUserId(c)
+
+	var isExist bool
+
+	err := model.DB.Model(
+		&model.UserFollow{},
+	).Select("count(*) > 0").Where(
+		"user_id = ? AND target_user_id = ?",
+		userId,
+		reqBody.UserId,
+	).Find(&isExist).Error
+	if err != nil {
+		utils.InternalError(c, err)
+		return
+	}
+
+	if !isExist {
+		utils.ResError(c, http.StatusBadRequest, 5, "You did not followed")
+	}
+
+	if err := model.DB.Delete(
+		model.UserFollow{
+			UserId:       userId,
+			TargetUserId: reqBody.UserId,
+		},
+	).Error; err != nil {
+		utils.InternalError(c, err)
+		return
+	}
 
 	utils.ResOK(c, nil)
 }

@@ -30,6 +30,16 @@ type User struct {
 	PostCnt      int       `json:"postCount"`
 }
 
+type PostLike struct {
+	UserId       int `gorm:"not null" json:"userId"`
+	TargetPostId int `gorm:"not null" json:"targetPostId"`
+}
+
+type UserFollow struct {
+	UserId       int `gorm:"not null" json:"userId"`
+	TargetUserId int `gorm:"not null" json:"targetUserId"`
+}
+
 var DB *gorm.DB
 
 func ConnectDB() {
@@ -45,7 +55,7 @@ func ConnectDB() {
 		panic("DB 연결에 실패하였습니다.")
 	}
 
-	err = db.AutoMigrate(&Post{}, &User{})
+	err = db.AutoMigrate(&Post{}, &User{}, &PostLike{})
 	if err != nil {
 		panic("DB 연결에 실패하였습니다.")
 	}

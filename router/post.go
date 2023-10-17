@@ -1,10 +1,12 @@
 package router
 
 import (
+	"cubeWeb/middlewares"
 	"cubeWeb/model"
 	"cubeWeb/utils"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -13,8 +15,25 @@ import (
 func SetPostRouter(rg *gin.RouterGroup) {
 	group := rg.Group("/post")
 	group.GET("/", getPost)
-	group.POST("/", postPost)
+	group.POST("/write/",
+		middlewares.AuthRequired(),
+		middlewares.CheckReqBody[writeReqBody](),
+		middlewares.CheckSessionId(),
+		postWrite,
+	)
 	group.GET("/search/", getSearch)
+	group.POST("/like/",
+		middlewares.AuthRequired(),
+		middlewares.CheckReqBody[likeReqBody](),
+		middlewares.CheckSessionId(),
+		postLike,
+	)
+	group.POST("/unlike/",
+		middlewares.AuthRequired(),
+		middlewares.CheckReqBody[likeReqBody](),
+		middlewares.CheckSessionId(),
+		postUnlike,
+	)
 }
 
 type postResData struct {
@@ -29,8 +48,6 @@ type postResData struct {
 
 func getPost(c *gin.Context) {
 	postIdQur := c.Query("postId")
-
-	//NOTE - Query PostId
 	postId, err := strconv.Atoi(postIdQur)
 	if err != nil {
 		utils.ResError(c, http.StatusBadRequest, 1, "Invaild postId query")
@@ -66,32 +83,22 @@ func getPost(c *gin.Context) {
 	})
 }
 
-type postReqBody struct {
+type writeReqBody struct {
 	Content string `json:"content"`
 }
 
-func postPost(c *gin.Context) {
-	session := utils.GetSession(c)
-	var reqBody postReqBody
+func postWrite(c *gin.Context) {
+	var reqBody writeReqBody
+	c.BindJSON(&reqBody)
 
-	sessionId, err := c.Cookie("sessionId")
-	if err != nil {
-		utils.ResError(c, http.StatusUnauthorized, 1, "You must be logged in")
-		return
-	}
+	userId, _ := utils.GetUserId(c)
 
-	if err := c.BindJSON(&reqBody); err != nil {
-		utils.ResError(c, http.StatusBadRequest, 2, "Invaild request body")
-		return
-	}
-
-	userId := utils.GetUserIdBySessionId(session, sessionId)
-
-	post := model.Post{
-		UserId:  int(userId),
-		Content: reqBody.Content,
-	}
-	if err := model.DB.Create(&post).Error; err != nil {
+	if err := model.DB.Create(
+		model.Post{
+			UserId:  userId,
+			Content: reqBody.Content,
+		},
+	).Error; err != nil {
 		utils.InternalError(c, err)
 		return
 	}
@@ -113,6 +120,13 @@ func getSearch(c *gin.Context) {
 	userId := c.DefaultQuery("userId", "-1")
 	dateFromQur := c.DefaultQuery("dateFrom", "-1")
 	lengthQur := c.DefaultQuery("length", "10")
+	keywordsQur := c.DefaultQuery("query", "")
+
+	//NOTE - Query Keywords
+	keywords := ""
+	if keywordsQur != "" {
+		keywords = strings.ReplaceAll(keywordsQur, "_", "|")
+	}
 
 	//NOTE - Query UserId
 	if _, err := strconv.Atoi(userId); err != nil {
@@ -147,15 +161,22 @@ func getSearch(c *gin.Context) {
 	//NOTE - DB Select
 	var posts []model.Post
 
-	dbQuery := model.DB.Model(&model.Post{}).Select(
+	dbQuery := model.DB.Model(
+		&model.Post{},
+	).Select(
 		"posts.*",
 		"users.user_nm", "users.user_nick_nm",
 	).Joins(
 		"left join users on posts.user_id = users.user_id",
-	).Order("posts.create_dt").Limit(length).Where(
-		"posts.create_dt < ?", dateFrom,
+	).Order(
+		"posts.create_dt",
+	).Where(
+		"posts.create_dt < ? AND posts.content REGEXP ?",
+		dateFrom,
+		keywords,
+	).Limit(
+		length,
 	)
-
 	if userId != "-1" {
 		dbQuery.Where("posts.user_id = ?", userId)
 	}
@@ -179,4 +200,82 @@ func getSearch(c *gin.Context) {
 	}
 
 	utils.ResOK(c, res)
+}
+
+type likeReqBody struct {
+	PostId int `json:"postId"`
+}
+
+func postLike(c *gin.Context) {
+	var reqBody likeReqBody
+	c.BindJSON(&reqBody)
+
+	userId, _ := utils.GetUserId(c)
+
+	var isExist bool
+
+	err := model.DB.Model(
+		&model.PostLike{},
+	).Select("count(*) > 0").Where(
+		"user_id = ? AND target_post_id = ?",
+		userId,
+		reqBody.PostId,
+	).Find(&isExist).Error
+	if err != nil {
+		utils.InternalError(c, err)
+		return
+	}
+
+	if isExist {
+		utils.ResError(c, http.StatusBadRequest, 5, "You already liked")
+	}
+
+	if err := model.DB.Create(
+		model.PostLike{
+			UserId:       userId,
+			TargetPostId: reqBody.PostId,
+		},
+	).Error; err != nil {
+		utils.InternalError(c, err)
+		return
+	}
+
+	utils.ResOK(c, nil)
+}
+
+func postUnlike(c *gin.Context) {
+	var reqBody likeReqBody
+	c.BindJSON(&reqBody)
+
+	userId, _ := utils.GetUserId(c)
+
+	var isExist bool
+
+	err := model.DB.Model(
+		&model.PostLike{},
+	).Select("count(*) > 0").Where(
+		"user_id = ? AND target_post_id = ?",
+		userId,
+		reqBody.PostId,
+	).Find(&isExist).Error
+	if err != nil {
+		utils.InternalError(c, err)
+		return
+	}
+
+	if !isExist {
+		utils.ResError(c, http.StatusBadRequest, 5, "You did not liked")
+	}
+
+	if err := model.DB.Delete(
+		model.PostLike{
+			UserId:       userId,
+			TargetPostId: reqBody.PostId,
+		},
+	).Error; err != nil {
+		utils.InternalError(c, err)
+		return
+	}
+
+	utils.ResOK(c, nil)
 }
