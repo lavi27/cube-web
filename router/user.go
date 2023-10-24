@@ -12,7 +12,10 @@ import (
 
 func SetUserRouter(rg *gin.RouterGroup) {
 	group := rg.Group("/user")
-	group.GET("/", getUser)
+
+	group.GET("/",
+		getUser,
+	)
 	group.POST("/follow/",
 		middlewares.AuthRequired(),
 		middlewares.CheckReqBody[followReqBody](),
@@ -83,7 +86,7 @@ type followReqBody struct {
 
 func postFollow(c *gin.Context) {
 	var reqBody followReqBody
-	c.BindJSON(&reqBody)
+	utils.GetBodyJSON(c, &reqBody)
 
 	userId, _ := utils.GetUserId(c)
 
@@ -120,7 +123,7 @@ func postFollow(c *gin.Context) {
 
 func postUnfollow(c *gin.Context) {
 	var reqBody followReqBody
-	c.BindJSON(&reqBody)
+	utils.GetBodyJSON(c, &reqBody)
 
 	userId, _ := utils.GetUserId(c)
 

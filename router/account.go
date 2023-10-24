@@ -14,8 +14,8 @@ import (
 
 func SetAccountRouter(rg *gin.RouterGroup) {
 	group := rg.Group("/account")
+
 	group.GET("/",
-		middlewares.AuthRequired(),
 		middlewares.CheckSessionId(),
 		getAccount,
 	)
@@ -43,7 +43,8 @@ func getAccount(c *gin.Context) {
 	}
 
 	if dbQuery.UserId == 0 {
-		utils.ResError(c, http.StatusNotFound, 2, "Account not found")
+		c.SetCookie("sessionId", "", -1, "/", env.ClientIP, false, true)
+		utils.ResError(c, http.StatusRequestTimeout, 102, "Invaild sessionId")
 		return
 	}
 
@@ -58,7 +59,7 @@ type signinReqBody struct {
 func postSignin(c *gin.Context) {
 	session := utils.GetSession(c)
 	var reqBody signinReqBody
-	c.BindJSON(&reqBody)
+	utils.GetBodyJSON(c, &reqBody)
 
 	var dbQuery model.User
 	if err := model.DB.Where(
@@ -94,7 +95,7 @@ type signupReqBody struct {
 func postSignup(c *gin.Context) {
 	session := utils.GetSession(c)
 	var reqBody signupReqBody
-	c.BindJSON(&reqBody)
+	utils.GetBodyJSON(c, &reqBody)
 
 	var dbQuery model.User
 	if err := model.DB.Where(

@@ -14,7 +14,10 @@ import (
 
 func SetPostRouter(rg *gin.RouterGroup) {
 	group := rg.Group("/post")
-	group.GET("/", getPost)
+
+	group.GET("/",
+		getPost,
+	)
 	group.POST("/write/",
 		middlewares.AuthRequired(),
 		middlewares.CheckReqBody[writeReqBody](),
@@ -89,7 +92,7 @@ type writeReqBody struct {
 
 func postWrite(c *gin.Context) {
 	var reqBody writeReqBody
-	c.BindJSON(&reqBody)
+	utils.GetBodyJSON(c, &reqBody)
 
 	userId, _ := utils.GetUserId(c)
 
@@ -120,12 +123,12 @@ func getSearch(c *gin.Context) {
 	userId := c.DefaultQuery("userId", "-1")
 	dateFromQur := c.DefaultQuery("dateFrom", "-1")
 	lengthQur := c.DefaultQuery("length", "10")
-	keywordsQur := c.DefaultQuery("query", "")
+	keywordsQur := c.DefaultQuery("keywords", "")
 
 	//NOTE - Query Keywords
 	keywords := ""
 	if keywordsQur != "" {
-		keywords = strings.ReplaceAll(keywordsQur, "_", "|")
+		keywords = "%(" + strings.ReplaceAll(keywordsQur, " ", "|") + ")%"
 	}
 
 	//NOTE - Query UserId
@@ -168,17 +171,17 @@ func getSearch(c *gin.Context) {
 		"users.user_nm", "users.user_nick_nm",
 	).Joins(
 		"left join users on posts.user_id = users.user_id",
-	).Order(
-		"posts.create_dt",
-	).Where(
-		"posts.create_dt < ? AND posts.content REGEXP ?",
-		dateFrom,
-		keywords,
-	).Limit(
+	).Order("posts.create_dt").Limit(
 		length,
+	).Where(
+		"posts.create_dt < ?",
+		dateFrom,
 	)
 	if userId != "-1" {
 		dbQuery.Where("posts.user_id = ?", userId)
+	}
+	if keywords != "" {
+		dbQuery.Where("posts.content SIMILAR TO ?", keywords)
 	}
 
 	if err = dbQuery.Find(&posts).Error; err != nil {
@@ -186,7 +189,7 @@ func getSearch(c *gin.Context) {
 		return
 	}
 
-	var res []searchResData
+	res := []searchResData{}
 	for _, value := range posts {
 		res = append(res, searchResData{
 			value.PostId,
@@ -208,7 +211,7 @@ type likeReqBody struct {
 
 func postLike(c *gin.Context) {
 	var reqBody likeReqBody
-	c.BindJSON(&reqBody)
+	utils.GetBodyJSON(c, &reqBody)
 
 	userId, _ := utils.GetUserId(c)
 
@@ -245,7 +248,7 @@ func postLike(c *gin.Context) {
 
 func postUnlike(c *gin.Context) {
 	var reqBody likeReqBody
-	c.BindJSON(&reqBody)
+	utils.GetBodyJSON(c, &reqBody)
 
 	userId, _ := utils.GetUserId(c)
 
@@ -265,6 +268,7 @@ func postUnlike(c *gin.Context) {
 
 	if !isExist {
 		utils.ResError(c, http.StatusBadRequest, 5, "You did not liked")
+		return
 	}
 
 	if err := model.DB.Delete(

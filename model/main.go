@@ -5,6 +5,7 @@ import (
 	"cubeWeb/utils"
 	"time"
 
+	gormsessions "github.com/gin-contrib/sessions/gorm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -40,11 +41,13 @@ type UserFollow struct {
 	TargetUserId int `gorm:"not null" json:"targetUserId"`
 }
 
-var DB *gorm.DB
+var (
+	DB           *gorm.DB
+	SessionStore gormsessions.Store
+)
 
 func ConnectDB() {
 	dsn := "host=" + env.DBIP + " user=" + env.DBUser + " password=" + env.DBPassword + " dbname=" + env.DBName + " port=" + env.DBPort + " sslmode=disable"
-
 	config := gorm.Config{
 		TranslateError: true,
 		Logger:         utils.SQLLogger,
@@ -55,7 +58,9 @@ func ConnectDB() {
 		panic("DB 연결에 실패하였습니다.")
 	}
 
-	err = db.AutoMigrate(&Post{}, &User{}, &PostLike{})
+	SessionStore = gormsessions.NewStore(db, true, []byte("sessionId"))
+
+	err = db.AutoMigrate(&Post{}, &User{}, &PostLike{}, &UserFollow{})
 	if err != nil {
 		panic("DB 연결에 실패하였습니다.")
 	}

@@ -11,7 +11,7 @@ func ResOK(c *gin.Context, data any) {
 }
 
 func ResError(c *gin.Context, status int, errCode int, msg string) {
-	c.JSON(status, gin.H{
+	c.AbortWithStatusJSON(status, gin.H{
 		"status":    status,
 		"errorCode": errCode,
 		"error":     HttpStatusName[status],
@@ -20,5 +20,5 @@ func ResError(c *gin.Context, status int, errCode int, msg string) {
 }
 
 func InternalError(c *gin.Context, err error) {
-	ResError(c, http.StatusInternalServerError, 0, "Unknown server error occured")
+	ResError(c, http.StatusInternalServerError, 200, "Unknown server error occured")
 }

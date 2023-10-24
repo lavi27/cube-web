@@ -2,8 +2,8 @@ package utils
 
 import (
 	"cubeWeb/env"
+	"encoding/json"
 	"errors"
-	"reflect"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -14,7 +14,7 @@ var IsDevlopment = env.Enviroment == "devlopment"
 
 func GetSession(c *gin.Context) sessions.Session {
 	session := sessions.Default(c)
-	session.Options(sessions.Options{MaxAge: SessionTimeoutSec})
+	session.Options(sessions.Options{MaxAge: SessionTimeoutSec, Path: "/"})
 	return session
 }
 
@@ -22,27 +22,33 @@ func IsLoggedIn(c *gin.Context) bool {
 	_, err := c.Cookie("sessionId")
 
 	if err != nil {
-		return true
-	} else {
 		return false
+	} else {
+		return true
 	}
 }
 
 func GetUserId(c *gin.Context) (int, error) {
 	session := GetSession(c)
-	sessionId, _ := c.Cookie("sessionId")
-
-	realSession := reflect.ValueOf(session).Elem().FieldByName("session")
-
-	if !realSession.IsValid() {
-		return 0, errors.New("session not found")
+	sessionId, err := c.Cookie("sessionId")
+	if err != nil {
+		return 0, err
 	}
 
-	realSession = realSession.Elem().FieldByName(sessionId)
-
-	if !realSession.IsValid() {
-		return 0, errors.New("sessionId not found")
+	val := session.Get(sessionId)
+	if val == nil {
+		return 0, errors.New("invaild sessionId")
 	}
 
-	return int(realSession.Int()), nil
+	valInt, ok := val.(int)
+	if !ok {
+		return 0, errors.New("invaild sessionId value type")
+	}
+
+	return valInt, nil
+}
+
+func GetBodyJSON(c *gin.Context, ptr any) {
+	bodyBytes, _ := c.GetRawData()
+	_ = json.Unmarshal(bodyBytes, ptr)
 }

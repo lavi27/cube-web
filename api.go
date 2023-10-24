@@ -7,6 +7,7 @@ import (
 	"cubeWeb/router"
 	"cubeWeb/utils"
 
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,7 +27,7 @@ func setupRouter() *gin.Engine {
 	r.Use(gin.Recovery())
 	r.Use(middlewares.Logger())
 	r.Use(middlewares.Cors())
-	r.Use(middlewares.Session())
+	r.Use(sessions.Sessions("session", model.SessionStore))
 
 	api := r.Group("/api")
 	router.SetPostRouter(api)
