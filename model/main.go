@@ -16,8 +16,9 @@ type Post struct {
 	Content    string    `gorm:"not null" json:"content,omitempty"`
 	CreateDt   time.Time `gorm:"not null;datetime:timestamp;autoCreateTime" json:"createDate,omitempty"`
 	LikeCnt    int       `gorm:"not null;default:0" json:"likeCount"`
-	UserNm     string    `json:"userName,omitempty"`
-	UserNickNm string    `json:"userNickname,omitempty"`
+	UserNm     string    `gorm:"default:null" json:"userName,omitempty"`
+	UserNickNm string    `gorm:"default:null" json:"userNickname,omitempty"`
+	IsLiked    bool      `gorm:"default:null" json:"isLiked"`
 }
 
 type User struct {

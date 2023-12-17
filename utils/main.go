@@ -32,7 +32,7 @@ func GetUserId(c *gin.Context) (int, error) {
 	session := GetSession(c)
 	sessionId, err := c.Cookie("sessionId")
 	if err != nil {
-		return 0, err
+		return 0, ErrNotFound
 	}
 
 	val := session.Get(sessionId)

@@ -21,4 +21,5 @@ func ResError(c *gin.Context, status int, errCode int, msg string) {
 
 func InternalError(c *gin.Context, err error) {
 	ResError(c, http.StatusInternalServerError, 200, "Unknown server error occured")
+	ErrLogger.Error(err)
 }

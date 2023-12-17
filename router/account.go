@@ -31,6 +31,11 @@ func SetAccountRouter(rg *gin.RouterGroup) {
 	)
 }
 
+type accountResData struct {
+	UserId       int    `json:"userId,omitempty"`
+	UserNickname string `json:"userNickname,omitempty"`
+}
+
 func getAccount(c *gin.Context) {
 	userId, _ := utils.GetUserId(c)
 
@@ -48,7 +53,10 @@ func getAccount(c *gin.Context) {
 		return
 	}
 
-	utils.ResOK(c, userId)
+	utils.ResOK(c, accountResData{
+		userId,
+		dbQuery.UserNickNm,
+	})
 }
 
 type signinReqBody struct {
@@ -117,8 +125,9 @@ func postSignup(c *gin.Context) {
 	}
 
 	user := model.User{
-		UserNm: reqBody.UserName,
-		UserPw: string(pwHash),
+		UserNm:     reqBody.UserName,
+		UserNickNm: reqBody.UserName,
+		UserPw:     string(pwHash),
 	}
 	if err := model.DB.Create(&user).Error; err != nil {
 		utils.InternalError(c, err)

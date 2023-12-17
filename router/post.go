@@ -40,49 +40,63 @@ func SetPostRouter(rg *gin.RouterGroup) {
 }
 
 type postResData struct {
-	PostId     int    `json:"postId,omitempty"`
-	UserId     int    `json:"userId,omitempty"`
-	Content    string `json:"content,omitempty"`
-	CreateDt   int64  `json:"createDate,omitempty"`
+	PostId     int    `json:"postId"`
+	UserId     int    `json:"userId"`
+	Content    string `json:"content"`
+	CreateDt   int64  `json:"createDate"`
 	LikeCnt    int    `json:"likeCount"`
-	UserNm     string `json:"userName,omitempty"`
-	UserNickNm string `json:"userNickname,omitempty"`
+	UserNickNm string `json:"userNickname"`
+	IsLiked    bool   `json:"isLiked"`
 }
 
 func getPost(c *gin.Context) {
 	postIdQur := c.Query("postId")
+	userId, userIdErr := utils.GetUserId(c)
 	postId, err := strconv.Atoi(postIdQur)
 	if err != nil {
 		utils.ResError(c, http.StatusBadRequest, 1, "Invaild postId query")
 		return
 	}
 
-	var dbQuery model.Post
-	if err = model.DB.Model(&model.Post{}).Select(
-		"posts.*",
-		"users.user_nm", "users.user_nick_nm",
-	).Joins(
-		"left join users on posts.user_id = users.user_id",
-	).Where(
-		"posts.post_id = ?", postId,
-	).Find(&dbQuery).Error; err != nil {
+	var dbRes model.Post
+	selectArr := []string{
+		"posts.post_id", "posts.content", "posts.create_dt",
+		"users.user_id", "users.user_nm", "users.user_nick_nm",
+		"COUNT(post_likes.*) as like_cnt",
+	}
+	groupArr := "posts.post_id, posts.content, posts.create_dt, users.user_nm, users.user_nick_nm, users.user_id"
+	dbQuery := model.DB.Model(&model.Post{})
+
+	if userIdErr != utils.ErrNotFound {
+		selectArr = append(selectArr, "(case when post_likes.user_id = "+strconv.Itoa(userId)+" then true else false end) as is_liked")
+		groupArr += ", post_likes.user_id"
+	}
+
+	err = dbQuery.Select(selectArr).Where("post_id = ?", postId).Group(groupArr).Joins(
+		"left join users on posts.user_id = users.user_id left join post_likes on posts.post_id = post_likes.target_post_id",
+	).Find(&dbRes).Error
+	if err != nil {
 		utils.InternalError(c, err)
 		return
 	}
 
-	if dbQuery.PostId == 0 {
+	if dbRes.PostId == 0 {
 		utils.ResError(c, http.StatusNotFound, 2, "Post not found")
 		return
 	}
 
+	if userIdErr == utils.ErrNotFound {
+		dbRes.IsLiked = false
+	}
+
 	utils.ResOK(c, postResData{
-		dbQuery.PostId,
-		dbQuery.UserId,
-		dbQuery.Content,
-		dbQuery.CreateDt.Unix(),
-		dbQuery.LikeCnt,
-		dbQuery.UserNm,
-		dbQuery.UserNickNm,
+		dbRes.PostId,
+		dbRes.UserId,
+		dbRes.Content,
+		dbRes.CreateDt.Unix(),
+		dbRes.LikeCnt,
+		dbRes.UserNickNm,
+		dbRes.IsLiked,
 	})
 }
 
@@ -96,12 +110,12 @@ func postWrite(c *gin.Context) {
 
 	userId, _ := utils.GetUserId(c)
 
-	if err := model.DB.Create(
-		model.Post{
-			UserId:  userId,
-			Content: reqBody.Content,
-		},
-	).Error; err != nil {
+	post := model.Post{
+		UserId:  userId,
+		Content: reqBody.Content,
+	}
+
+	if err := model.DB.Create(&post).Error; err != nil {
 		utils.InternalError(c, err)
 		return
 	}
@@ -109,21 +123,13 @@ func postWrite(c *gin.Context) {
 	utils.ResOK(c, nil)
 }
 
-type searchResData struct {
-	PostId     int    `gorm:"not null;primaryKey;AUTO_INCREMENT" json:"postId,omitempty"`
-	UserId     int    `gorm:"not null" json:"userId,omitempty"`
-	Content    string `gorm:"not null" json:"content,omitempty"`
-	CreateDt   int64  `gorm:"not null;datetime:timestamp;autoCreateTime" json:"createDate,omitempty"`
-	LikeCnt    int    `gorm:"not null;default:0" json:"likeCount"`
-	UserNm     string `json:"userName,omitempty"`
-	UserNickNm string `json:"userNickname,omitempty"`
-}
-
 func getSearch(c *gin.Context) {
-	userId := c.DefaultQuery("userId", "-1")
+	userIdQur := c.DefaultQuery("userId", "-1")
 	dateFromQur := c.DefaultQuery("dateFrom", "-1")
 	lengthQur := c.DefaultQuery("length", "10")
 	keywordsQur := c.DefaultQuery("keywords", "")
+
+	userId, userIdErr := utils.GetUserId(c)
 
 	//NOTE - Query Keywords
 	keywords := ""
@@ -132,7 +138,7 @@ func getSearch(c *gin.Context) {
 	}
 
 	//NOTE - Query UserId
-	if _, err := strconv.Atoi(userId); err != nil {
+	if _, err := strconv.Atoi(userIdQur); err != nil {
 		utils.ResError(c, http.StatusBadRequest, 1, "Invaild userId query")
 		return
 	}
@@ -157,28 +163,34 @@ func getSearch(c *gin.Context) {
 		return
 	}
 	if length > 100 {
-		utils.ResError(c, http.StatusBadRequest, 4, "Too much length, should be under 100")
+		utils.ResError(c, http.StatusBadRequest, 4, "Too much length, it should be under 100")
 		return
 	}
 
-	//NOTE - DB Select
+	//NOTE - DB Create Query
 	var posts []model.Post
+	selectArr := []string{
+		"posts.post_id", "posts.content", "posts.create_dt",
+		"users.user_id", "users.user_nm", "users.user_nick_nm",
+		"COUNT(post_likes.*) as like_cnt",
+	}
+	groupArr := "posts.post_id, posts.content, posts.create_dt, users.user_nm, users.user_nick_nm, users.user_id"
+	dbQuery := model.DB.Model(&model.Post{})
 
-	dbQuery := model.DB.Model(
-		&model.Post{},
-	).Select(
-		"posts.*",
-		"users.user_nm", "users.user_nick_nm",
-	).Joins(
-		"left join users on posts.user_id = users.user_id",
-	).Order("posts.create_dt").Limit(
-		length,
-	).Where(
-		"posts.create_dt < ?",
-		dateFrom,
+	if userIdErr != utils.ErrNotFound {
+		selectArr = append(selectArr, "(case when post_likes.user_id = "+strconv.Itoa(userId)+" then true else false end) as is_liked")
+		groupArr += ", post_likes.user_id"
+	}
+
+	dbQuery.Select(selectArr).Group(groupArr).Joins(
+		"left join users on posts.user_id = users.user_id left join post_likes on posts.post_id = post_likes.target_post_id",
 	)
-	if userId != "-1" {
-		dbQuery.Where("posts.user_id = ?", userId)
+	dbQuery.Order("posts.create_dt DESC").Limit(length).Where(
+		"posts.create_dt < ?", dateFrom,
+	)
+
+	if userIdQur != "-1" {
+		dbQuery.Where("posts.user_id = ?", userIdQur)
 	}
 	if keywords != "" {
 		dbQuery.Where("posts.content SIMILAR TO ?", keywords)
@@ -189,16 +201,20 @@ func getSearch(c *gin.Context) {
 		return
 	}
 
-	res := []searchResData{}
+	res := []postResData{}
 	for _, value := range posts {
-		res = append(res, searchResData{
+		if userIdErr == utils.ErrNotFound {
+			value.IsLiked = false
+		}
+
+		res = append(res, postResData{
 			value.PostId,
 			value.UserId,
 			value.Content,
 			value.CreateDt.Unix(),
 			value.LikeCnt,
-			value.UserNm,
 			value.UserNickNm,
+			value.IsLiked,
 		})
 	}
 
@@ -217,13 +233,9 @@ func postLike(c *gin.Context) {
 
 	var isExist bool
 
-	err := model.DB.Model(
-		&model.PostLike{},
-	).Select("count(*) > 0").Where(
-		"user_id = ? AND target_post_id = ?",
-		userId,
-		reqBody.PostId,
-	).Find(&isExist).Error
+	err := model.DB.Model(&model.PostLike{}).Where(
+		"user_id = ? AND target_post_id = ?", userId, reqBody.PostId,
+	).Select("count(*) > 0").Find(&isExist).Error
 	if err != nil {
 		utils.InternalError(c, err)
 		return
@@ -231,14 +243,13 @@ func postLike(c *gin.Context) {
 
 	if isExist {
 		utils.ResError(c, http.StatusBadRequest, 5, "You already liked")
+		return
 	}
 
-	if err := model.DB.Create(
-		model.PostLike{
-			UserId:       userId,
-			TargetPostId: reqBody.PostId,
-		},
-	).Error; err != nil {
+	if err := model.DB.Create(&model.PostLike{
+		UserId:       userId,
+		TargetPostId: reqBody.PostId,
+	}).Error; err != nil {
 		utils.InternalError(c, err)
 		return
 	}
@@ -254,13 +265,9 @@ func postUnlike(c *gin.Context) {
 
 	var isExist bool
 
-	err := model.DB.Model(
-		&model.PostLike{},
-	).Select("count(*) > 0").Where(
-		"user_id = ? AND target_post_id = ?",
-		userId,
-		reqBody.PostId,
-	).Find(&isExist).Error
+	err := model.DB.Model(&model.PostLike{}).Where(
+		"user_id = ? AND target_post_id = ?", userId, reqBody.PostId,
+	).Select("count(*) > 0").Find(&isExist).Error
 	if err != nil {
 		utils.InternalError(c, err)
 		return
@@ -271,12 +278,9 @@ func postUnlike(c *gin.Context) {
 		return
 	}
 
-	if err := model.DB.Delete(
-		model.PostLike{
-			UserId:       userId,
-			TargetPostId: reqBody.PostId,
-		},
-	).Error; err != nil {
+	if err := model.DB.Where(
+		"user_id = ? AND target_post_id = ?", userId, reqBody.PostId,
+	).Delete(&model.PostLike{}).Error; err != nil {
 		utils.InternalError(c, err)
 		return
 	}

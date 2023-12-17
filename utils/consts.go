@@ -1,5 +1,7 @@
 package utils
 
+import "errors"
+
 const IsDebug = false
 const SessionTimeoutSec = 60 * 60 * 3 //3h
 
@@ -46,3 +48,5 @@ var HttpStatusName = map[int]string{
 	504: "Gateway Timeout",
 	505: "HTTP Version Not Supported",
 }
+
+var ErrNotFound = errors.New("resource was not found")

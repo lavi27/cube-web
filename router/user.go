@@ -32,7 +32,6 @@ func SetUserRouter(rg *gin.RouterGroup) {
 
 type userResData struct {
 	UserId         int    `json:"userId,omitempty"`
-	UserName       string `json:"userName,omitempty"`
 	UserNickname   string `json:"userNickname,omitempty"`
 	CreateDate     int64  `json:"createDate,omitempty"`
 	FollowerCount  int    `json:"followerCount"`
@@ -71,7 +70,6 @@ func getUser(c *gin.Context) {
 	utils.ResOK(c,
 		userResData{
 			dbQuery.UserId,
-			dbQuery.UserNm,
 			dbQuery.UserNickNm,
 			dbQuery.CreateDt.Unix(),
 			dbQuery.FollowerCnt,
