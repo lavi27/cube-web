@@ -3,7 +3,7 @@ package utils
 import "errors"
 
 const IsDebug = false
-const SessionTimeoutSec = 60 * 60 * 3 //3h
+const SessionTimeoutSec = 60 * 60 * 12 //12h
 
 var HttpStatusName = map[int]string{
 	200: "OK",
